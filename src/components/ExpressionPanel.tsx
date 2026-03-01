@@ -58,7 +58,7 @@ export default function ExpressionPanel({
             expressions.map((expr, i) => (
               <div
                 key={i}
-                className="rounded-lg border bg-card/50 p-3 backdrop-blur-sm transition-colors hover:bg-accent/50"
+                className="rounded-lg border bg-card/50 p-2.5 backdrop-blur-sm transition-colors hover:bg-accent/50 sm:p-3"
               >
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="font-medium text-sm">{expr.original}</span>

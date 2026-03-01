@@ -35,8 +35,8 @@ export default function LanguageSelector({
   onTargetChange,
 }: LanguageSelectorProps) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex-1">
+    <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 sm:gap-3">
+      <div>
         <label className="mb-1 block text-xs font-medium text-muted-foreground">
           Source
         </label>
@@ -54,9 +54,9 @@ export default function LanguageSelector({
         </Select>
       </div>
 
-      <span className="mt-5 text-muted-foreground">→</span>
+      <span className="pb-2 text-muted-foreground">→</span>
 
-      <div className="flex-1">
+      <div>
         <label className="mb-1 block text-xs font-medium text-muted-foreground">
           Target
         </label>

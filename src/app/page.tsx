@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import ImageUploader, { ImageData } from "@/components/ImageUploader";
 import LanguageSelector from "@/components/LanguageSelector";
+import ModeSelector, { TranslationMode } from "@/components/ModeSelector";
 import TranslationResult, {
   PageResult,
 } from "@/components/TranslationResult";
@@ -17,6 +18,7 @@ interface Expression {
 }
 
 export default function Home() {
+  const [mode, setMode] = useState<TranslationMode>("summary");
   const [sourceLang, setSourceLang] = useState("auto");
   const [targetLang, setTargetLang] = useState("Japanese");
   const [pages, setPages] = useState<PageResult[]>([]);
@@ -52,6 +54,7 @@ export default function Home() {
           })),
           sourceLang,
           targetLang,
+          mode,
         }),
       });
 
@@ -87,6 +90,7 @@ export default function Home() {
                 originalText: result.originalText,
                 translatedText: result.translatedText,
                 detectedLanguage: result.detectedLanguage,
+                summaryTranslation: result.summaryTranslation,
               }]);
               setExpressions((prev) => [...prev, ...result.expressions]);
             } else if (event.type === "error") {
@@ -110,7 +114,9 @@ export default function Home() {
 
   const sorted = [...pages].sort((a, b) => a.pageIndex - b.pageIndex);
   const allOriginal = sorted.map((p) => p.originalText).join("\n\n");
-  const allTranslated = sorted.map((p) => p.translatedText).join("\n\n");
+  const allTranslated = mode === "summary"
+    ? sorted.map((p) => p.summaryTranslation || "").join("\n\n")
+    : sorted.map((p) => p.translatedText).join("\n\n");
 
   const chatContext =
     allOriginal && allTranslated
@@ -120,12 +126,12 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-3 py-3 sm:px-4 sm:py-4">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">
+            <h1 className="text-lg font-bold tracking-tight sm:text-xl">
               Book Translator
             </h1>
-            <p className="text-xs text-muted-foreground">
+            <p className="hidden text-xs text-muted-foreground sm:block">
               Upload book pages — get OCR, translation & useful expressions
             </p>
           </div>
@@ -133,11 +139,12 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <main className="mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-6">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1fr_320px]">
           {/* Left column */}
           <div className="space-y-6">
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
+              <ModeSelector mode={mode} onModeChange={setMode} />
               <LanguageSelector
                 sourceLang={sourceLang}
                 targetLang={targetLang}
@@ -193,6 +200,7 @@ export default function Home() {
               pages={pages}
               totalPages={totalPages}
               isLoading={isLoading}
+              mode={mode}
             />
           </div>
 

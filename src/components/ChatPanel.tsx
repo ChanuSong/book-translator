@@ -74,7 +74,7 @@ export default function ChatPanel({ context }: ChatPanelProps) {
     return (
       <Button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-lg"
+        className="fixed bottom-4 right-4 z-50 h-12 w-12 rounded-full shadow-lg sm:bottom-6 sm:right-6"
         size="icon"
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -90,7 +90,7 @@ export default function ChatPanel({ context }: ChatPanelProps) {
   }
 
   return (
-    <Card className="fixed bottom-6 right-6 z-50 w-80 shadow-xl sm:w-96">
+    <Card className="fixed inset-x-0 bottom-0 z-50 rounded-b-none shadow-xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-96 sm:rounded-b-xl">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-sm font-medium">Ask about this text</CardTitle>
         <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="h-7 w-7 p-0">
@@ -110,15 +110,15 @@ export default function ChatPanel({ context }: ChatPanelProps) {
                 key={i}
                 className={`rounded-lg px-3 py-2 text-sm ${
                   msg.role === "user"
-                    ? "ml-8 bg-primary text-primary-foreground"
-                    : "mr-8 bg-muted"
+                    ? "ml-4 bg-primary text-primary-foreground sm:ml-8"
+                    : "mr-4 bg-muted sm:mr-8"
                 }`}
               >
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               </div>
             ))}
             {isLoading && (
-              <div className="mr-8 rounded-lg bg-muted px-3 py-2">
+              <div className="mr-4 rounded-lg bg-muted px-3 py-2 sm:mr-8">
                 <div className="flex gap-1">
                   <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" />
                   <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />

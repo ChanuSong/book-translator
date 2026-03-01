@@ -10,12 +10,16 @@ export interface PageResult {
   originalText: string;
   translatedText: string;
   detectedLanguage: string;
+  summaryTranslation?: string;
 }
+
+type TranslationMode = "direct" | "summary";
 
 interface TranslationResultProps {
   pages: PageResult[];
   totalPages: number;
   isLoading: boolean;
+  mode?: TranslationMode;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -49,12 +53,15 @@ export default function TranslationResult({
   pages,
   totalPages,
   isLoading,
+  mode = "direct",
 }: TranslationResultProps) {
   if (!isLoading && pages.length === 0) return null;
 
   const sorted = [...pages].sort((a, b) => a.pageIndex - b.pageIndex);
   const allOriginal = sorted.map((p) => p.originalText).join("\n\n");
-  const allTranslated = sorted.map((p) => p.translatedText).join("\n\n");
+  const allTranslated = mode === "summary"
+    ? sorted.map((p) => p.summaryTranslation || "").join("\n\n")
+    : sorted.map((p) => p.translatedText).join("\n\n");
   const showMultiPage = totalPages > 1;
   const pendingCount = totalPages - pages.length;
 
@@ -80,7 +87,7 @@ export default function TranslationResult({
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="flex items-center gap-2">
@@ -125,7 +132,9 @@ export default function TranslationResult({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Translation</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {mode === "summary" ? "요약 번역 (Summary)" : "Translation"}
+            </CardTitle>
             {allTranslated && <CopyButton text={allTranslated} />}
           </CardHeader>
           <CardContent>
@@ -141,7 +150,7 @@ export default function TranslationResult({
                       </p>
                     )}
                     <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                      {page.translatedText}
+                      {mode === "summary" ? page.summaryTranslation : page.translatedText}
                     </p>
                   </div>
                 ))}
@@ -153,6 +162,7 @@ export default function TranslationResult({
           </CardContent>
         </Card>
       </div>
+
     </div>
   );
 }

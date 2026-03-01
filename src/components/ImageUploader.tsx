@@ -91,7 +91,7 @@ export default function ImageUploader({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={() => fileInputRef.current?.click()}
-        className={`relative cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-all ${
+        className={`relative cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-all sm:p-6 ${
           isDragging
             ? "border-primary bg-primary/5 scale-[1.02]"
             : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
@@ -105,14 +105,14 @@ export default function ImageUploader({
                   <img
                     src={img.preview}
                     alt={`Page ${i + 1}`}
-                    className="h-24 w-auto rounded-lg object-cover shadow-sm"
+                    className="h-16 w-auto rounded-lg object-cover shadow-sm sm:h-24"
                   />
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       removeImage(i);
                     }}
-                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-xs text-destructive-foreground opacity-100 sm:h-5 sm:w-5 sm:-right-1.5 sm:-top-1.5 sm:text-[10px] sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100"
                   >
                     ✕
                   </button>

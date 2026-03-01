@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { translateSingleImage } from "@/lib/gemini";
 
 export async function POST(request: NextRequest) {
-  const { images, sourceLang, targetLang } = await request.json();
+  const { images, sourceLang, targetLang, mode } = await request.json();
 
   if (!images || !Array.isArray(images) || images.length === 0) {
     return Response.json({ error: "No images provided" }, { status: 400 });
@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
             img.mimeType,
             sourceLang || "auto",
             targetLang || "Japanese",
-            index
+            index,
+            mode || "direct"
           )
             .then((result) => {
               controller.enqueue(

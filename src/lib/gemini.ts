@@ -6,6 +6,8 @@ import {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
+export type TranslationMode = "direct" | "summary";
+
 // JSON schema for structured output — Gemini guarantees valid JSON when this is set
 const translationSchema: ResponseSchema = {
   type: SchemaType.OBJECT,
@@ -47,11 +49,52 @@ const translationSchema: ResponseSchema = {
   required: ["originalText", "translatedText", "detectedLanguage", "expressions"],
 };
 
+const summarySchema: ResponseSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    originalText: {
+      type: SchemaType.STRING,
+      description: "The full extracted text, properly formatted with paragraph breaks",
+    },
+    summaryTranslation: {
+      type: SchemaType.STRING,
+      description: "A concise, easy-to-read translation that summarizes the core content in slightly simpler language",
+    },
+    detectedLanguage: {
+      type: SchemaType.STRING,
+      description: "The detected source language",
+    },
+    expressions: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          original: {
+            type: SchemaType.STRING,
+            description: "The expression in the original language",
+          },
+          translated: {
+            type: SchemaType.STRING,
+            description: "Translation of the expression",
+          },
+          explanation: {
+            type: SchemaType.STRING,
+            description: "Brief explanation of usage, nuance, or cultural context",
+          },
+        },
+        required: ["original", "translated", "explanation"],
+      },
+    },
+  },
+  required: ["originalText", "summaryTranslation", "detectedLanguage", "expressions"],
+};
+
 export interface TranslationResult {
   pageIndex: number;
   originalText: string;
   translatedText: string;
   detectedLanguage: string;
+  summaryTranslation?: string;
   expressions: {
     original: string;
     translated: string;
@@ -64,13 +107,16 @@ export async function translateSingleImage(
   mimeType: string,
   sourceLang: string,
   targetLang: string,
-  pageIndex: number
+  pageIndex: number,
+  mode: TranslationMode = "direct"
 ): Promise<TranslationResult> {
+  const schema = mode === "summary" ? summarySchema : translationSchema;
+
   const model = genAI.getGenerativeModel({
     model: "gemini-2.0-flash",
     generationConfig: {
       responseMimeType: "application/json",
-      responseSchema: translationSchema,
+      responseSchema: schema,
     },
   });
 
@@ -79,11 +125,29 @@ export async function translateSingleImage(
       ? "Auto-detect the source language"
       : `Source language: ${sourceLang}`;
 
-  const prompt = `You are a professional book translator. Analyze this book page image and perform the following tasks:
+  const styleGuide = `
+## Translation Style Rules (MUST follow for consistency across all pages):
+- **Tone**: Use plain/casual register (e.g. Japanese: だ/である体, Korean: 해체/한다체). This is not rude — it is the neutral literary style used in books and essays. Never mix with polite forms (です/ます, 합니다).
+- **Paragraph breaks**: Separate paragraphs with a single blank line (\\n\\n). Do NOT use single line breaks (\\n) within a paragraph — each paragraph should be a continuous block of text.
+- **Sentence endings**: Keep sentence endings consistent throughout. Do not alternate between styles.
+- **Person**: Use third-person narrative unless the original text is in first person. Stay consistent with the original.
+- **Numbers and proper nouns**: Keep numbers in their original format. Transliterate proper nouns consistently.`;
+
+  const prompt = mode === "summary"
+    ? `You are a professional book translator and summarizer. Analyze this book page image and perform the following tasks:
+
+1. **OCR**: Extract all visible text from the image. IMPORTANT: Do NOT output raw OCR with broken line breaks. Reconstruct the text into natural, readable sentences and paragraphs. Each sentence should flow naturally. Use newline characters only between paragraphs or logical sections, not mid-sentence.
+2. **Summary Translation**: Translate the core content into ${targetLang} using slightly simpler, easy-to-understand language. This is NOT a literal translation — condense and summarize the key points while keeping it readable as a coherent text. Omit minor details and focus on the essential meaning. The result should read like a concise, natural summary written in easy ${targetLang}.
+3. **Useful Expressions**: Identify 2-3 noteworthy expressions, idioms, or vocabulary from the text that would be educational for a language learner. The "translated" and "explanation" fields MUST be written in ${targetLang}.
+${styleGuide}
+
+${sourceLangInstruction}`
+    : `You are a professional book translator. Analyze this book page image and perform the following tasks:
 
 1. **OCR**: Extract all visible text from the image. IMPORTANT: Do NOT output raw OCR with broken line breaks. Reconstruct the text into natural, readable sentences and paragraphs. Each sentence should flow naturally. Use newline characters only between paragraphs or logical sections, not mid-sentence.
 2. **Translation**: Translate the extracted text into ${targetLang}. Also format with proper paragraph breaks matching the original structure.
 3. **Useful Expressions**: Identify 2-3 noteworthy expressions, idioms, or vocabulary from the text that would be educational for a language learner. The "translated" and "explanation" fields MUST be written in ${targetLang}.
+${styleGuide}
 
 ${sourceLangInstruction}`;
 
@@ -103,8 +167,11 @@ ${sourceLangInstruction}`;
   return {
     pageIndex,
     originalText: parsed.originalText || "",
-    translatedText: parsed.translatedText || "",
+    translatedText: mode === "direct" ? (parsed.translatedText || "") : "",
     detectedLanguage: parsed.detectedLanguage || "",
+    ...(mode === "summary" && {
+      summaryTranslation: parsed.summaryTranslation || "",
+    }),
     expressions: parsed.expressions || [],
   };
 }
