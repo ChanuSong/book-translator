@@ -3,7 +3,9 @@
 import { useState, useCallback } from "react";
 import ImageUploader, { ImageData } from "@/components/ImageUploader";
 import LanguageSelector from "@/components/LanguageSelector";
-import TranslationResult from "@/components/TranslationResult";
+import TranslationResult, {
+  PageResult,
+} from "@/components/TranslationResult";
 import ExpressionPanel from "@/components/ExpressionPanel";
 import ChatPanel from "@/components/ChatPanel";
 import { Button } from "@/components/ui/button";
@@ -17,9 +19,8 @@ interface Expression {
 export default function Home() {
   const [sourceLang, setSourceLang] = useState("auto");
   const [targetLang, setTargetLang] = useState("Japanese");
-  const [originalText, setOriginalText] = useState("");
-  const [translatedText, setTranslatedText] = useState("");
-  const [detectedLanguage, setDetectedLanguage] = useState("");
+  const [pages, setPages] = useState<PageResult[]>([]);
+  const [totalPages, setTotalPages] = useState(0);
   const [expressions, setExpressions] = useState<Expression[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,9 +37,9 @@ export default function Home() {
 
     setIsLoading(true);
     setError(null);
-    setOriginalText("");
-    setTranslatedText("");
+    setPages([]);
     setExpressions([]);
+    setTotalPages(pendingImages.length);
 
     try {
       const res = await fetch("/api/translate", {
@@ -54,16 +55,52 @@ export default function Home() {
         }),
       });
 
-      const data = await res.json();
-
-      if (data.error) {
-        throw new Error(data.error);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Translation failed");
       }
 
-      setOriginalText(data.originalText || "");
-      setTranslatedText(data.translatedText || "");
-      setDetectedLanguage(data.detectedLanguage || "");
-      setExpressions(data.expressions || []);
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const errors: string[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+
+            if (event.type === "page") {
+              const result = event.data;
+              setPages((prev) => [...prev, {
+                pageIndex: result.pageIndex,
+                originalText: result.originalText,
+                translatedText: result.translatedText,
+                detectedLanguage: result.detectedLanguage,
+              }]);
+              setExpressions((prev) => [...prev, ...result.expressions]);
+            } else if (event.type === "error") {
+              errors.push(event.message);
+            }
+          } catch {
+            // skip malformed JSON lines
+          }
+        }
+      }
+
+      if (errors.length > 0) {
+        setError(errors.join("\n"));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Translation failed");
     } finally {
@@ -71,9 +108,13 @@ export default function Home() {
     }
   };
 
+  const sorted = [...pages].sort((a, b) => a.pageIndex - b.pageIndex);
+  const allOriginal = sorted.map((p) => p.originalText).join("\n\n");
+  const allTranslated = sorted.map((p) => p.translatedText).join("\n\n");
+
   const chatContext =
-    originalText && translatedText
-      ? { originalText, translatedText }
+    allOriginal && allTranslated
+      ? { originalText: allOriginal, translatedText: allTranslated }
       : null;
 
   return (
@@ -134,8 +175,7 @@ export default function Home() {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                       />
                     </svg>
-                    Translating {pendingImages.length} page
-                    {pendingImages.length > 1 ? "s" : ""}...
+                    Translating {pages.length}/{totalPages} pages...
                   </span>
                 ) : (
                   `Translate${pendingImages.length > 1 ? ` (${pendingImages.length} pages)` : ""}`
@@ -144,15 +184,14 @@ export default function Home() {
             </div>
 
             {error && (
-              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="whitespace-pre-wrap rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
 
             <TranslationResult
-              originalText={originalText}
-              translatedText={translatedText}
-              detectedLanguage={detectedLanguage}
+              pages={pages}
+              totalPages={totalPages}
               isLoading={isLoading}
             />
           </div>

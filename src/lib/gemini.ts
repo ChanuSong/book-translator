@@ -1,66 +1,112 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  GoogleGenerativeAI,
+  type ResponseSchema,
+  SchemaType,
+} from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-interface ImageInput {
-  base64: string;
-  mimeType: string;
+// JSON schema for structured output — Gemini guarantees valid JSON when this is set
+const translationSchema: ResponseSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    originalText: {
+      type: SchemaType.STRING,
+      description: "The full extracted text, properly formatted with paragraph breaks",
+    },
+    translatedText: {
+      type: SchemaType.STRING,
+      description: "The full translated text with paragraph breaks",
+    },
+    detectedLanguage: {
+      type: SchemaType.STRING,
+      description: "The detected source language",
+    },
+    expressions: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          original: {
+            type: SchemaType.STRING,
+            description: "The expression in the original language",
+          },
+          translated: {
+            type: SchemaType.STRING,
+            description: "Translation of the expression",
+          },
+          explanation: {
+            type: SchemaType.STRING,
+            description: "Brief explanation of usage, nuance, or cultural context",
+          },
+        },
+        required: ["original", "translated", "explanation"],
+      },
+    },
+  },
+  required: ["originalText", "translatedText", "detectedLanguage", "expressions"],
+};
+
+export interface TranslationResult {
+  pageIndex: number;
+  originalText: string;
+  translatedText: string;
+  detectedLanguage: string;
+  expressions: {
+    original: string;
+    translated: string;
+    explanation: string;
+  }[];
 }
 
-export async function translateImages(
-  images: ImageInput[],
+export async function translateSingleImage(
+  imageBase64: string,
+  mimeType: string,
   sourceLang: string,
-  targetLang: string
-) {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  targetLang: string,
+  pageIndex: number
+): Promise<TranslationResult> {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: translationSchema,
+    },
+  });
 
   const sourceLangInstruction =
-    sourceLang === "auto" ? "Auto-detect the source language" : `Source language: ${sourceLang}`;
+    sourceLang === "auto"
+      ? "Auto-detect the source language"
+      : `Source language: ${sourceLang}`;
 
-  const pageCount = images.length;
-  const pageNote =
-    pageCount > 1
-      ? `There are ${pageCount} page images. Process them in order (page 1, page 2, ...) and combine all text as one continuous passage.`
-      : "There is one page image.";
+  const prompt = `You are a professional book translator. Analyze this book page image and perform the following tasks:
 
-  const prompt = `You are a professional book translator. Analyze the book page image(s) and perform the following tasks:
-
-${pageNote}
-
-1. **OCR**: Extract all visible text from the image(s) in page order. IMPORTANT: Do NOT output raw OCR with broken line breaks. Reconstruct the text into natural, readable sentences and paragraphs. Each sentence should flow naturally. Use line breaks only between paragraphs or logical sections, not mid-sentence.
+1. **OCR**: Extract all visible text from the image. IMPORTANT: Do NOT output raw OCR with broken line breaks. Reconstruct the text into natural, readable sentences and paragraphs. Each sentence should flow naturally. Use newline characters only between paragraphs or logical sections, not mid-sentence.
 2. **Translation**: Translate the extracted text into ${targetLang}. Also format with proper paragraph breaks matching the original structure.
-3. **Useful Expressions**: Identify 3-5 noteworthy expressions, idioms, or vocabulary from the text that would be educational for a language learner. The "translated" and "explanation" fields MUST be written in ${targetLang}.
+3. **Useful Expressions**: Identify 2-3 noteworthy expressions, idioms, or vocabulary from the text that would be educational for a language learner. The "translated" and "explanation" fields MUST be written in ${targetLang}.
 
-${sourceLangInstruction}
+${sourceLangInstruction}`;
 
-Respond in the following JSON format ONLY (no markdown code blocks):
-{
-  "originalText": "the full extracted text, properly formatted with paragraph breaks",
-  "translatedText": "the full translated text in ${targetLang}, with paragraph breaks",
-  "detectedLanguage": "the detected source language",
-  "expressions": [
+  const result = await model.generateContent([
     {
-      "original": "the expression in the original language",
-      "translated": "translation of the expression in ${targetLang}",
-      "explanation": "brief explanation in ${targetLang} of usage, nuance, or cultural context"
-    }
-  ]
-}`;
-
-  const imageParts = images.map((img) => ({
-    inlineData: {
-      mimeType: img.mimeType,
-      data: img.base64,
+      inlineData: {
+        mimeType,
+        data: imageBase64,
+      },
     },
-  }));
-
-  const result = await model.generateContent([...imageParts, { text: prompt }]);
+    { text: prompt },
+  ]);
 
   const response = result.response;
-  const text = response.text();
+  const parsed = JSON.parse(response.text());
 
-  const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-  return JSON.parse(cleaned);
+  return {
+    pageIndex,
+    originalText: parsed.originalText || "",
+    translatedText: parsed.translatedText || "",
+    detectedLanguage: parsed.detectedLanguage || "",
+    expressions: parsed.expressions || [],
+  };
 }
 
 export async function chat(
