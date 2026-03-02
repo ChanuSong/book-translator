@@ -112,11 +112,18 @@ export async function translateSingleImage(
 ): Promise<TranslationResult> {
   const schema = mode === "summary" ? summarySchema : translationSchema;
 
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+  const modelWithSchema = genAI.getGenerativeModel({
+    model: "gemini-3.0-flash",
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: schema,
+    },
+  });
+
+  const modelWithoutSchema = genAI.getGenerativeModel({
+    model: "gemini-3.0-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
     },
   });
 
@@ -151,7 +158,7 @@ ${styleGuide}
 
 ${sourceLangInstruction}`;
 
-  const result = await model.generateContent([
+  const contentParts = [
     {
       inlineData: {
         mimeType,
@@ -159,10 +166,27 @@ ${sourceLangInstruction}`;
       },
     },
     { text: prompt },
-  ]);
+  ];
 
-  const response = result.response;
-  const parsed = JSON.parse(response.text());
+  let parsed;
+  const MAX_RETRIES = 2;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const useSchema = attempt < MAX_RETRIES;
+      const model = useSchema ? modelWithSchema : modelWithoutSchema;
+      const result = await model.generateContent(contentParts);
+      parsed = JSON.parse(result.response.text());
+      break;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "";
+      const isSchemaError = msg.includes("did not match the expected pattern") ||
+        msg.includes("schema");
+      if (attempt === MAX_RETRIES || !isSchemaError) {
+        throw error;
+      }
+    }
+  }
 
   return {
     pageIndex,
@@ -180,7 +204,7 @@ export async function chat(
   messages: { role: string; content: string }[],
   context: { originalText: string; translatedText: string }
 ) {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-3.0-flash" });
 
   const systemPrompt = `You are a helpful language learning assistant. The user is reading a book and has translated a page. Here is the context:
 
