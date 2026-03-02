@@ -113,7 +113,7 @@ export async function translateSingleImage(
   const schema = mode === "summary" ? summarySchema : translationSchema;
 
   const modelWithSchema = genAI.getGenerativeModel({
-    model: "gemini-3.0-flash",
+    model: "gemini-3-flash-preview",
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: schema,
@@ -121,7 +121,7 @@ export async function translateSingleImage(
   });
 
   const modelWithoutSchema = genAI.getGenerativeModel({
-    model: "gemini-3.0-flash",
+    model: "gemini-3-flash-preview",
     generationConfig: {
       responseMimeType: "application/json",
     },
@@ -204,7 +204,7 @@ export async function chat(
   messages: { role: string; content: string }[],
   context: { originalText: string; translatedText: string }
 ) {
-  const model = genAI.getGenerativeModel({ model: "gemini-3.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
   const systemPrompt = `You are a helpful language learning assistant. The user is reading a book and has translated a page. Here is the context:
 
