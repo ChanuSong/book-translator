@@ -59,8 +59,15 @@ export default function Home() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Translation failed");
+        const text = await res.text();
+        let message = "Translation failed";
+        try {
+          const data = JSON.parse(text);
+          message = data.error || message;
+        } catch {
+          message = text || `HTTP ${res.status}`;
+        }
+        throw new Error(message);
       }
 
       const reader = res.body?.getReader();
