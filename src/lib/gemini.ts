@@ -176,13 +176,23 @@ ${sourceLangInstruction}`;
       const useSchema = attempt < MAX_RETRIES;
       const model = useSchema ? modelWithSchema : modelWithoutSchema;
       const result = await model.generateContent(contentParts);
-      parsed = JSON.parse(result.response.text());
+      const text = result.response.text();
+      if (!text || !text.trim().startsWith("{")) {
+        throw new Error(`Gemini returned non-JSON response: ${text.slice(0, 100)}`);
+      }
+      parsed = JSON.parse(text);
       break;
     } catch (error) {
+      if (attempt === MAX_RETRIES) {
+        throw error;
+      }
       const msg = error instanceof Error ? error.message : "";
-      const isSchemaError = msg.includes("did not match the expected pattern") ||
-        msg.includes("schema");
-      if (attempt === MAX_RETRIES || !isSchemaError) {
+      const isRetryable = msg.includes("did not match the expected pattern") ||
+        msg.includes("schema") ||
+        msg.includes("not valid JSON") ||
+        msg.includes("non-JSON response") ||
+        msg.includes("Unexpected token");
+      if (!isRetryable) {
         throw error;
       }
     }
