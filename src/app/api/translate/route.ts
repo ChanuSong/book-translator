@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 import { translateSingleImage } from "@/lib/gemini";
 
-export async function POST(request: NextRequest) {
-  const { images, sourceLang, targetLang, mode } = await request.json();
+export const runtime = "edge";
 
-  if (!images || !Array.isArray(images) || images.length === 0) {
-    return Response.json({ error: "No images provided" }, { status: 400 });
+export async function POST(request: NextRequest) {
+  const { image, sourceLang, targetLang, mode } = await request.json();
+
+  if (!image || !image.base64 || !image.mimeType) {
+    return Response.json({ error: "No image provided" }, { status: 400 });
   }
 
   if (!process.env.GEMINI_API_KEY) {
@@ -15,60 +17,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const encoder = new TextEncoder();
+  try {
+    const result = await translateSingleImage(
+      image.base64,
+      image.mimeType,
+      sourceLang || "auto",
+      targetLang || "Japanese",
+      image.pageIndex ?? 0,
+      mode || "direct"
+    );
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      // Send total count first
-      controller.enqueue(
-        encoder.encode(JSON.stringify({ type: "start", total: images.length }) + "\n")
-      );
-
-      // Process all images in parallel, stream each result as it completes
-      const promises = images.map(
-        (img: { base64: string; mimeType: string }, index: number) =>
-          translateSingleImage(
-            img.base64,
-            img.mimeType,
-            sourceLang || "auto",
-            targetLang || "Japanese",
-            index,
-            mode || "direct"
-          )
-            .then((result) => {
-              controller.enqueue(
-                encoder.encode(
-                  JSON.stringify({ type: "page", data: result }) + "\n"
-                )
-              );
-            })
-            .catch((error) => {
-              console.error(`Translation error for page ${index + 1}:`, error);
-              controller.enqueue(
-                encoder.encode(
-                  JSON.stringify({
-                    type: "error",
-                    pageIndex: index,
-                    message: `Page ${index + 1} failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-                  }) + "\n"
-                )
-              );
-            })
-      );
-
-      await Promise.allSettled(promises);
-
-      controller.enqueue(
-        encoder.encode(JSON.stringify({ type: "done" }) + "\n")
-      );
-      controller.close();
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-    },
-  });
+    return Response.json(result);
+  } catch (error) {
+    console.error("Translation error:", error);
+    return Response.json(
+      {
+        error: `Translation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      },
+      { status: 500 }
+    );
+  }
 }

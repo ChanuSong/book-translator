@@ -43,80 +43,57 @@ export default function Home() {
     setExpressions([]);
     setTotalPages(pendingImages.length);
 
-    try {
-      const res = await fetch("/api/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          images: pendingImages.map((img) => ({
-            base64: img.base64,
-            mimeType: img.mimeType,
-          })),
-          sourceLang,
-          targetLang,
-          mode,
-        }),
-      });
+    const errors: string[] = [];
 
-      if (!res.ok) {
-        const text = await res.text();
-        let message = "Translation failed";
-        try {
-          const data = JSON.parse(text);
-          message = data.error || message;
-        } catch {
-          message = text || `HTTP ${res.status}`;
-        }
-        throw new Error(message);
-      }
+    for (let i = 0; i < pendingImages.length; i++) {
+      const img = pendingImages[i];
+      try {
+        const res = await fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            image: {
+              base64: img.base64,
+              mimeType: img.mimeType,
+              pageIndex: i,
+            },
+            sourceLang,
+            targetLang,
+            mode,
+          }),
+        });
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response stream");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      const errors: string[] = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
+        if (!res.ok) {
+          const text = await res.text();
+          let message = "Translation failed";
           try {
-            const event = JSON.parse(line);
-
-            if (event.type === "page") {
-              const result = event.data;
-              setPages((prev) => [...prev, {
-                pageIndex: result.pageIndex,
-                originalText: result.originalText,
-                translatedText: result.translatedText,
-                detectedLanguage: result.detectedLanguage,
-                summaryTranslation: result.summaryTranslation,
-              }]);
-              setExpressions((prev) => [...prev, ...result.expressions]);
-            } else if (event.type === "error") {
-              errors.push(event.message);
-            }
+            const data = JSON.parse(text);
+            message = data.error || message;
           } catch {
-            // skip malformed JSON lines
+            message = text || `HTTP ${res.status}`;
           }
+          errors.push(`Page ${i + 1}: ${message}`);
+          continue;
         }
-      }
 
-      if (errors.length > 0) {
-        setError(errors.join("\n"));
+        const result = await res.json();
+        setPages((prev) => [...prev, {
+          pageIndex: result.pageIndex,
+          originalText: result.originalText,
+          translatedText: result.translatedText,
+          detectedLanguage: result.detectedLanguage,
+          summaryTranslation: result.summaryTranslation,
+        }]);
+        setExpressions((prev) => [...prev, ...result.expressions]);
+      } catch (err) {
+        errors.push(`Page ${i + 1}: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Translation failed");
-    } finally {
-      setIsLoading(false);
     }
+
+    if (errors.length > 0) {
+      setError(errors.join("\n"));
+    }
+    setIsLoading(false);
   };
 
   const sorted = [...pages].sort((a, b) => a.pageIndex - b.pageIndex);
