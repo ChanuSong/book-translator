@@ -22,6 +22,40 @@ export default function ImageUploader({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const compressImage = useCallback(
+    (file: File, maxDimension = 2048, quality = 0.8): Promise<ImageData> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+
+          let { width, height } = img;
+          if (width > maxDimension || height > maxDimension) {
+            const ratio = Math.min(maxDimension / width, maxDimension / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d")!;
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const dataUrl = canvas.toDataURL("image/jpeg", quality);
+          resolve({
+            base64: dataUrl.split(",")[1],
+            mimeType: "image/jpeg",
+            preview: dataUrl,
+          });
+        };
+        img.src = url;
+      });
+    },
+    []
+  );
+
   const processFiles = useCallback(
     (files: FileList | File[]) => {
       const imageFiles = Array.from(files).filter((f) =>
@@ -29,29 +63,15 @@ export default function ImageUploader({
       );
       if (imageFiles.length === 0) return;
 
-      const promises = imageFiles.map(
-        (file) =>
-          new Promise<ImageData>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              const dataUrl = e.target?.result as string;
-              resolve({
-                base64: dataUrl.split(",")[1],
-                mimeType: file.type,
-                preview: dataUrl,
-              });
-            };
-            reader.readAsDataURL(file);
-          })
+      Promise.all(imageFiles.map((file) => compressImage(file))).then(
+        (newImages) => {
+          const updated = [...images, ...newImages];
+          setImages(updated);
+          onImagesSelect(updated);
+        }
       );
-
-      Promise.all(promises).then((newImages) => {
-        const updated = [...images, ...newImages];
-        setImages(updated);
-        onImagesSelect(updated);
-      });
     },
-    [images, onImagesSelect]
+    [images, onImagesSelect, compressImage]
   );
 
   const handleDrop = useCallback(
